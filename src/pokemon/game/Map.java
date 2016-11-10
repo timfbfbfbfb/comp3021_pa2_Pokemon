@@ -62,8 +62,12 @@ public class Map {
         return new Cell(this.m, this.n);
     }
 
-    public final char[][] getMap() {
+    public char[][] getMap() {
         return map;
+    }
+
+    public void setMap(Cell cell, char type) {
+        map[cell.getM()][cell.getN()] = type;
     }
 
     /**
@@ -76,6 +80,13 @@ public class Map {
         for (Pokemon pkm : this.pokemons)
             if (cell.equals(pkm))
                 return pkm;
+        return null;
+    }
+
+    public Station getStation(Cell cell) {
+        for (Station stn : this.stations)
+            if (cell.equals(stn))
+                return stn;
         return null;
     }
 
@@ -99,6 +110,10 @@ public class Map {
      */
     public void addPokemon(Pokemon pkm) {
         pokemons.add(pkm);
+    }
+
+    public ArrayList<Pokemon> getExistingPokemons() {
+        return this.pokemons;
     }
 
     /**
@@ -176,5 +191,13 @@ public class Map {
      */
     public boolean isDestination(Cell cell) {
         return map[cell.getM()][cell.getN()] == Map.DEST;
+    }
+
+    public void print() {
+        for (int i = 0; i < m; i++) {
+            for (int j = 0; j < n; j++)
+                System.out.print(map[i][j]);
+            System.out.println();
+        }
     }
 }

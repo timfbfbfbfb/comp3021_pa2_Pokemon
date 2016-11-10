@@ -4,7 +4,7 @@ package pokemon.game;
  * This class represent each single cell in the game map, which is the parent
  * class of Pokemon and Station
  */
-public class Cell extends Thread{
+public class Cell {
     private int m, n;
 
     /**
@@ -44,6 +44,11 @@ public class Cell extends Thread{
      */
     public int getN() {
         return n;
+    }
+
+    public void setCoordinate(Cell cell) {
+        this.m = cell.m;
+        this.n = cell.n;
     }
 
     /**

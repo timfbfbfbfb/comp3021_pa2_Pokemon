@@ -1,5 +1,6 @@
 package pokemon.ui;
 
+import javafx.animation.AnimationTimer;
 import javafx.application.Application;
 import javafx.geometry.Insets;
 import javafx.scene.Node;
@@ -15,6 +16,9 @@ import javafx.stage.Stage;
 import pokemon.game.*;
 
 import java.io.File;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Random;
 
 import static javafx.scene.input.KeyCode.*;
 
@@ -27,11 +31,11 @@ public class PokemonScreen extends Application {
     private enum Msg {NONE, UNCAUGHT, CAUGHT, ENDGAME}
 
     private static final int STEP_SIZE = 40;
-    private BorderPane mainPane;
-    private GridPane mapPane;
-    private VBox scorePane;
-    private Button resumeBtn, pauseBtn;
-    private ImageView avatar;
+    private final BorderPane mainPane;
+    private final GridPane mapPane;
+    private final VBox scorePane;
+    private final Button resumeBtn, pauseBtn;
+    private final ImageView avatar;
 
     // this are the urls of the images
     private static final String avatarFront = new File("icons/front.png").toURI().toString();
@@ -42,9 +46,14 @@ public class PokemonScreen extends Application {
     private static final String exitPath = new File("icons/exit.png").toURI().toString();
     private static final String ballPath = new File("icons/ball_ani.gif").toURI().toString();
 
+    private AnimationTimer animationTimer;
     private boolean avatarPause = false;
     private boolean gamePause = false;
     private KeyCode lastKeyPressed = null;
+    private int previousPlayerNoOfPokemons = 0;
+    public Thread respawnPokemonThread;
+    private final HashMap<Pokemon, Node> pokemonViews;
+    private final HashMap<Station, Node> stationViews;
 
     {
         avatar = new ImageView(new Image(avatarFront));
@@ -53,22 +62,29 @@ public class PokemonScreen extends Application {
         avatar.setPreserveRatio(true);
 
         game = new Game();
+        pokemonViews = new HashMap<>();
+        stationViews = new HashMap<>();
+
         mainPane = new BorderPane();
         mapPane = new GridPane();
 
         resumeBtn = new Button("Resume");
         resumeBtn.setOnAction(e -> {
+            if (gamePause)
+                animationTimer.start();
             gamePause = false;
             clearFocus();
         });
         pauseBtn = new Button("Pause");
         pauseBtn.setOnAction(e -> {
+            if (!gamePause)
+                animationTimer.stop();
             gamePause = true;
             clearFocus();
         });
 
         scorePane = new VBox();
-        scorePane.setPadding(new Insets(10));
+        scorePane.setPadding(new Insets(15));
     }
 
     /**
@@ -96,14 +112,16 @@ public class PokemonScreen extends Application {
                         break;
                     case Map.SUPP:
                         mapPane.add(viewFactory(View.PATH), j, i);
-                        mapPane.add(viewFactory(View.BALL), j, i);
+                        stationViews.put(map.getStation(new Cell(i, j)), viewFactory(View.BALL));
+                        mapPane.add(stationViews.get(map.getStation(new Cell(i, j))), j, i);
                         break;
                     case Map.WALL:
                         mapPane.add(viewFactory(View.TREE), j, i);
                         break;
                     case Map.POKE:
                         mapPane.add(viewFactory(View.PATH), j, i);
-                        mapPane.add(viewFactory(View.POKE, new Cell(i, j)), j, i);
+                        pokemonViews.put(map.getPokemon(new Cell(i, j)), viewFactory(View.POKE, new Cell(i, j)));
+                        mapPane.add(pokemonViews.get(map.getPokemon(new Cell(i, j))), j, i);
                         break;
                     case Map.START:
                         mapPane.add(viewFactory(View.PATH), j, i);
@@ -120,65 +138,193 @@ public class PokemonScreen extends Application {
         mainPane.setRight(scorePane);
         updateScorePane(Msg.NONE);
 
+        animationTimer = new AnimationTimer() {
+            long lastFrameUpdateTime = 0;
+
+            @Override
+            public void handle(long l) {
+                if (gamePause && resumeBtn.isDisable())
+                    return;
+
+                //check if at least one second is passed
+                if (Math.abs(l - lastFrameUpdateTime) > Math.pow(10, 9))
+                    lastFrameUpdateTime = l;
+                else
+                    return;
+
+                game.map.print();
+
+                //Randomly place the pokemons
+                HashMap<Pokemon, Node> newPokemonViews = new HashMap<>();
+                for (HashMap.Entry<Pokemon, Node> entry : pokemonViews.entrySet()) {
+                    Pokemon pkm = entry.getKey();
+                    Node node = entry.getValue();
+
+                    //randomly assign coordinate to pokemons and put into the new hashmap
+                    ArrayList<Cell> cells = new ArrayList<>();
+                    int m = pkm.getM(), n = pkm.getN();
+                    synchronized (game.map) {
+                        if (!game.map.isOutOfBound(pkm.up()) &&
+                                (pkm.up().equals(game.player.currentPos()) || game.map.getMap()[m - 1][n] == Map.PATH))
+                            cells.add(pkm.up());
+                        if (!game.map.isOutOfBound(pkm.right()) &&
+                                (pkm.right().equals(game.player.currentPos()) || game.map.getMap()[m][n + 1] == Map.PATH))
+                            cells.add(pkm.right());
+                        if (!game.map.isOutOfBound(pkm.down()) &&
+                                (pkm.down().equals(game.player.currentPos()) || game.map.getMap()[m + 1][n] == Map.PATH))
+                            cells.add(pkm.down());
+                        if (!game.map.isOutOfBound(pkm.left()) &&
+                                (pkm.left().equals(game.player.currentPos()) || game.map.getMap()[m][n - 1] == Map.PATH))
+                            cells.add(pkm.left());
+                    }
+
+                    Random random = new Random();
+                    boolean caughtEvent = false;
+
+                    synchronized (game.map) {
+                        game.map.getExistingPokemons().remove(pkm);
+                        game.map.setMap(pkm, Map.PATH);
+                        pkm.setCoordinate(cells.get(random.nextInt(cells.size())));
+                    }
+
+                    if (pkm.equals(game.player.currentPos())) {
+                        caughtEvent = true;
+                        if (pkm.canBeCaught(game.player.getNumOfBalls())) {
+                            game.player.catchPokemon(pkm);
+                            synchronized (scorePane) {
+                                updateScorePane(Msg.CAUGHT);
+                            }
+                            previousPlayerNoOfPokemons++;
+                        } else {
+                            synchronized (scorePane) {
+                                updateScorePane(Msg.UNCAUGHT);
+                            }
+                            newPokemonViews.put(pkm, node);
+                            respawnPokemon(pkm);
+                        }
+                    } else
+                        newPokemonViews.put(pkm, node);
+
+                    synchronized (game.map) {
+                        if (!caughtEvent) {
+                            game.map.getExistingPokemons().add(pkm);
+                            game.map.setMap(pkm, Map.POKE);
+                        }
+                    }
+
+                    synchronized (mapPane) {
+                        mapPane.getChildren().remove(node);
+                        if (!caughtEvent)
+                            mapPane.add(node, pkm.getN(), pkm.getM());
+                    }
+                }
+                synchronized (pokemonViews) {
+                    pokemonViews.clear();
+                    pokemonViews.putAll(newPokemonViews);
+                }
+            }
+        };
+
         Scene scene = new Scene(mainPane);
 
         scene.setOnKeyPressed(e -> {
             if (!gamePause && !avatarPause) {
                 Cell pos = game.player.currentPos();
                 Map map = game.map;
-                switch (e.getCode()) {
-                    case UP:
-                        avatar.setImage(new Image(avatarBack));
-                        if (!map.isOutOfBound(pos.up()) && !map.isWall(pos.up())) {
-                            game.player.move(pos.up(), map);
-                            mapPane.getChildren().remove(avatar);
-                            mapPane.add(avatar, pos.up().getN(), pos.up().getM());
-                        }
-                        lastKeyPressed = UP;
-                        break;
-                    case DOWN:
-                        avatar.setImage(new Image(avatarFront));
-                        if (!map.isOutOfBound(pos.down()) && !map.isWall(pos.down())) {
-                            game.player.move(pos.down(), map);
-                            mapPane.getChildren().remove(avatar);
-                            mapPane.add(avatar, pos.down().getN(), pos.down().getM());
-                        }
-                        lastKeyPressed = DOWN;
-                        break;
-                    case LEFT:
-                        avatar.setImage(new Image(avatarLeft));
-                        if (!map.isOutOfBound(pos.left()) && !map.isWall(pos.left())) {
-                            game.player.move(pos.left(), map);
-                            mapPane.getChildren().remove(avatar);
-                            mapPane.add(avatar, pos.left().getN(), pos.left().getM());
-                        }
-                        lastKeyPressed = LEFT;
-                        break;
-                    case RIGHT:
-                        avatar.setImage(new Image(avatarRight));
-                        if (!map.isOutOfBound(pos.right()) && !map.isWall(pos.right())) {
-                            game.player.move(pos.right(), map);
-                            mapPane.getChildren().remove(avatar);
-                            mapPane.add(avatar, pos.right().getN(), pos.right().getM());
-                        }
-                        lastKeyPressed = RIGHT;
-                        break;
+                synchronized (mapPane) {
+                    switch (e.getCode()) {
+                        case UP:
+                            avatar.setImage(new Image(avatarBack));
+                            if (!map.isOutOfBound(pos.up()) && !map.isWall(pos.up())) {
+                                game.player.move(pos.up(), map);
+                                mapPane.getChildren().remove(avatar);
+                                mapPane.add(avatar, pos.up().getN(), pos.up().getM());
+                            }
+                            lastKeyPressed = UP;
+                            break;
+                        case DOWN:
+                            avatar.setImage(new Image(avatarFront));
+                            if (!map.isOutOfBound(pos.down()) && !map.isWall(pos.down())) {
+                                game.player.move(pos.down(), map);
+                                mapPane.getChildren().remove(avatar);
+                                mapPane.add(avatar, pos.down().getN(), pos.down().getM());
+                            }
+                            lastKeyPressed = DOWN;
+                            break;
+                        case LEFT:
+                            avatar.setImage(new Image(avatarLeft));
+                            if (!map.isOutOfBound(pos.left()) && !map.isWall(pos.left())) {
+                                game.player.move(pos.left(), map);
+                                mapPane.getChildren().remove(avatar);
+                                mapPane.add(avatar, pos.left().getN(), pos.left().getM());
+                            }
+                            lastKeyPressed = LEFT;
+                            break;
+                        case RIGHT:
+                            avatar.setImage(new Image(avatarRight));
+                            if (!map.isOutOfBound(pos.right()) && !map.isWall(pos.right())) {
+                                game.player.move(pos.right(), map);
+                                mapPane.getChildren().remove(avatar);
+                                mapPane.add(avatar, pos.right().getN(), pos.right().getM());
+                            }
+                            lastKeyPressed = RIGHT;
+                            break;
+                    }
                 }
+
                 if (lastKeyPressed == UP || lastKeyPressed == DOWN || lastKeyPressed == LEFT || lastKeyPressed == RIGHT) {
                     if (map.isDestination(game.player.currentPos())) {
-                        updateScorePane(Msg.ENDGAME);
+                        synchronized (scorePane) {
+                            updateScorePane(Msg.ENDGAME);
+                        }
                         resumeBtn.setDisable(true);
                         pauseBtn.setDisable(true);
                         avatarPause = true;
                         gamePause = true;
+                    } else if (map.isPokemon(game.player.currentPos())) {
+                        Pokemon pkm = game.map.getPokemon(game.player.currentPos());
+                        synchronized (mapPane) {
+                            mapPane.getChildren().remove(pokemonViews.get(pkm));
+                        }
+                        synchronized (game.map) {
+                            game.map.getExistingPokemons().remove(pkm);
+                            game.map.setMap(pkm, Map.PATH);
+                        }
+
+                        if (previousPlayerNoOfPokemons < game.player.getNumOfPokemons()) {
+                            synchronized (scorePane) {
+                                updateScorePane(Msg.CAUGHT);
+                            }
+                            synchronized (pokemonViews) {
+                                pokemonViews.remove(pkm);
+                            }
+                            previousPlayerNoOfPokemons++;
+                        } else {
+                            synchronized (scorePane) {
+                                updateScorePane(Msg.UNCAUGHT);
+                            }
+                            respawnPokemon(pkm);
+                        }
+                    } else if (map.isSupplyStation(game.player.currentPos())) {
+                        synchronized (scorePane) {
+                            updateScorePane(Msg.NONE);
+                        }
+                        Station stn = game.map.getStation(game.player.currentPos());
+                        mapPane.getChildren().remove(stationViews.get(stn));
+                        respawnStation(stn);
                     } else
-                        updateScorePane(Msg.NONE);
+                        synchronized (scorePane) {
+                            updateScorePane(Msg.NONE);
+                        }
                     avatarPause = true;
                 }
+
             }
         });
 
-        scene.setOnKeyReleased(e -> {
+        scene.setOnKeyReleased(e ->
+
+        {
             if (e.getCode() == lastKeyPressed)
                 avatarPause = false;
         });
@@ -186,6 +332,7 @@ public class PokemonScreen extends Application {
         clearFocus();
         stage.setScene(scene);
         stage.show();
+        animationTimer.start();
     }
 
     private Node viewFactory(View k) {
@@ -266,6 +413,55 @@ public class PokemonScreen extends Application {
         scorePane.getChildren().clear();
         scorePane.getChildren().addAll(line1, line2, line3, line4, btnGp);
         scorePane.setSpacing(10);
+    }
+
+    private void respawnPokemon(Pokemon pkm) {
+        respawnPokemonThread = new Thread(() -> {
+            Random random = new Random();
+            ArrayList<Cell> cells = new ArrayList<>();
+            try {
+                System.out.println("Sleep now: " + System.currentTimeMillis());
+                Thread.sleep(3000);
+                System.out.println("wake up now: " + System.currentTimeMillis());
+
+                synchronized (game.map) {
+                    for (int i = 0; i < game.map.getDimension().getM(); i++)
+                        for (int j = 0; j < game.map.getDimension().getN(); j++)
+                            if (game.map.getMap()[i][j] == Map.PATH && !game.player.currentPos().equals(new Cell(i, j)))
+                                cells.add(new Cell(i, j));
+                    game.map.getExistingPokemons().remove(pkm);
+                    game.map.setMap(pkm, Map.PATH);
+                }
+//
+//
+//                Node view = pokemonViews.get(pkm);
+//
+//                synchronized (pokemonViews) {
+//                    pokemonViews.remove(pkm);
+//                    pkm.setCoordinate(cells.get(random.nextInt(cells.size())));
+//                    pokemonViews.put(pkm, view);
+//                }
+//
+//                synchronized (game.map) {
+//                    game.map.getExistingPokemons().add(pkm);
+//                    game.map.setMap(pkm, Map.POKE);
+//                }
+//
+//                Platform.runLater(() -> {
+//                    synchronized (mapPane) {
+//                        mapPane.getChildren().remove(view);
+//                        mapPane.add(view, pkm.getN(), pkm.getM());
+//                    }
+//                });
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        });
+        respawnPokemonThread.start();
+    }
+
+    private void respawnStation(Station stn) {
+
     }
 
     private void clearFocus() {
