@@ -2,6 +2,7 @@ package pokemon.ui;
 
 import javafx.animation.AnimationTimer;
 import javafx.application.Application;
+import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.scene.Node;
 import javafx.scene.Scene;
@@ -51,9 +52,8 @@ public class PokemonScreen extends Application {
     private boolean gamePause = false;
     private KeyCode lastKeyPressed = null;
     private int previousPlayerNoOfPokemons = 0;
-    public Thread respawnPokemonThread;
-    private final HashMap<Pokemon, Node> pokemonViews;
-    private final HashMap<Station, Node> stationViews;
+    private final HashMap<Pokemon, Node> pokemonViews, pokemonPendingViews;
+    private final HashMap<Station, Node> stationViews, stationPendingViews;
 
     {
         avatar = new ImageView(new Image(avatarFront));
@@ -63,7 +63,9 @@ public class PokemonScreen extends Application {
 
         game = new Game();
         pokemonViews = new HashMap<>();
+        pokemonPendingViews = new HashMap<>();
         stationViews = new HashMap<>();
+        stationPendingViews = new HashMap<>();
 
         mainPane = new BorderPane();
         mapPane = new GridPane();
@@ -126,6 +128,7 @@ public class PokemonScreen extends Application {
                     case Map.START:
                         mapPane.add(viewFactory(View.PATH), j, i);
                         mapPane.add(avatar, j, i);
+                        game.map.setMap(new Cell(i, j), Map.PATH);
                         break;
                 }
             }
@@ -143,7 +146,7 @@ public class PokemonScreen extends Application {
 
             @Override
             public void handle(long l) {
-                if (gamePause && resumeBtn.isDisable())
+                if (game.map.isDestination(game.player.currentPos()))
                     return;
 
                 //check if at least one second is passed
@@ -152,7 +155,11 @@ public class PokemonScreen extends Application {
                 else
                     return;
 
-                game.map.print();
+//                game.map.print();
+//                System.out.println("pokemonViews: " + pokemonViews);
+//                System.out.println("stationViews: " + stationViews);
+//                System.out.println("pokemonPendingViews: " + pokemonPendingViews);
+//                System.out.println("stationPendingViews: " + stationPendingViews);
 
                 //Randomly place the pokemons
                 HashMap<Pokemon, Node> newPokemonViews = new HashMap<>();
@@ -179,43 +186,41 @@ public class PokemonScreen extends Application {
                     }
 
                     Random random = new Random();
-                    boolean caughtEvent = false;
 
                     synchronized (game.map) {
                         game.map.getExistingPokemons().remove(pkm);
                         game.map.setMap(pkm, Map.PATH);
-                        pkm.setCoordinate(cells.get(random.nextInt(cells.size())));
                     }
+                    synchronized (mapPane) {
+                        mapPane.getChildren().remove(node);
+                    }
+                    pkm.setCoordinate(cells.get(random.nextInt(cells.size())));
 
                     if (pkm.equals(game.player.currentPos())) {
-                        caughtEvent = true;
                         if (pkm.canBeCaught(game.player.getNumOfBalls())) {
                             game.player.catchPokemon(pkm);
+                            previousPlayerNoOfPokemons++;
                             synchronized (scorePane) {
                                 updateScorePane(Msg.CAUGHT);
                             }
-                            previousPlayerNoOfPokemons++;
                         } else {
+                            synchronized (pokemonPendingViews) {
+                                pokemonPendingViews.put(pkm, node);
+                            }
                             synchronized (scorePane) {
                                 updateScorePane(Msg.UNCAUGHT);
                             }
-                            newPokemonViews.put(pkm, node);
                             respawnPokemon(pkm);
                         }
-                    } else
+                    } else {
                         newPokemonViews.put(pkm, node);
-
-                    synchronized (game.map) {
-                        if (!caughtEvent) {
+                        synchronized (game.map) {
                             game.map.getExistingPokemons().add(pkm);
                             game.map.setMap(pkm, Map.POKE);
                         }
-                    }
-
-                    synchronized (mapPane) {
-                        mapPane.getChildren().remove(node);
-                        if (!caughtEvent)
+                        synchronized (mapPane) {
                             mapPane.add(node, pkm.getN(), pkm.getM());
+                        }
                     }
                 }
                 synchronized (pokemonViews) {
@@ -228,7 +233,7 @@ public class PokemonScreen extends Application {
         Scene scene = new Scene(mainPane);
 
         scene.setOnKeyPressed(e -> {
-            if (!gamePause && !avatarPause) {
+            if (!avatarPause && !gamePause) {
                 Cell pos = game.player.currentPos();
                 Map map = game.map;
                 synchronized (mapPane) {
@@ -283,6 +288,7 @@ public class PokemonScreen extends Application {
                         gamePause = true;
                     } else if (map.isPokemon(game.player.currentPos())) {
                         Pokemon pkm = game.map.getPokemon(game.player.currentPos());
+                        Node temp;
                         synchronized (mapPane) {
                             mapPane.getChildren().remove(pokemonViews.get(pkm));
                         }
@@ -290,27 +296,43 @@ public class PokemonScreen extends Application {
                             game.map.getExistingPokemons().remove(pkm);
                             game.map.setMap(pkm, Map.PATH);
                         }
+                        synchronized (pokemonViews) {
+                            temp = pokemonViews.remove(pkm);
+                        }
 
                         if (previousPlayerNoOfPokemons < game.player.getNumOfPokemons()) {
                             synchronized (scorePane) {
                                 updateScorePane(Msg.CAUGHT);
-                            }
-                            synchronized (pokemonViews) {
-                                pokemonViews.remove(pkm);
                             }
                             previousPlayerNoOfPokemons++;
                         } else {
                             synchronized (scorePane) {
                                 updateScorePane(Msg.UNCAUGHT);
                             }
+                            synchronized (pokemonPendingViews) {
+                                pokemonPendingViews.put(pkm, temp);
+                            }
                             respawnPokemon(pkm);
                         }
                     } else if (map.isSupplyStation(game.player.currentPos())) {
+                        Station stn = game.map.getStation(game.player.currentPos());
+                        Node temp;
+                        synchronized (mapPane) {
+                            mapPane.getChildren().remove(stationViews.get(stn));
+                        }
                         synchronized (scorePane) {
                             updateScorePane(Msg.NONE);
                         }
-                        Station stn = game.map.getStation(game.player.currentPos());
-                        mapPane.getChildren().remove(stationViews.get(stn));
+                        synchronized (game.map) {
+                            game.map.getExistingStations().remove(stn);
+                            game.map.setMap(stn, Map.PATH);
+                        }
+                        synchronized (stationViews) {
+                            temp = stationViews.remove(stn);
+                        }
+                        synchronized (stationPendingViews) {
+                            stationPendingViews.put(stn, temp);
+                        }
                         respawnStation(stn);
                     } else
                         synchronized (scorePane) {
@@ -323,7 +345,6 @@ public class PokemonScreen extends Application {
         });
 
         scene.setOnKeyReleased(e ->
-
         {
             if (e.getCode() == lastKeyPressed)
                 avatarPause = false;
@@ -416,52 +437,91 @@ public class PokemonScreen extends Application {
     }
 
     private void respawnPokemon(Pokemon pkm) {
-        respawnPokemonThread = new Thread(() -> {
+        Thread t = new Thread(() -> {
+            //suspend 3 to 5 seconds
             Random random = new Random();
-            ArrayList<Cell> cells = new ArrayList<>();
             try {
-                System.out.println("Sleep now: " + System.currentTimeMillis());
-                Thread.sleep(3000);
-                System.out.println("wake up now: " + System.currentTimeMillis());
-
-                synchronized (game.map) {
-                    for (int i = 0; i < game.map.getDimension().getM(); i++)
-                        for (int j = 0; j < game.map.getDimension().getN(); j++)
-                            if (game.map.getMap()[i][j] == Map.PATH && !game.player.currentPos().equals(new Cell(i, j)))
-                                cells.add(new Cell(i, j));
-                    game.map.getExistingPokemons().remove(pkm);
-                    game.map.setMap(pkm, Map.PATH);
-                }
-//
-//
-//                Node view = pokemonViews.get(pkm);
-//
-//                synchronized (pokemonViews) {
-//                    pokemonViews.remove(pkm);
-//                    pkm.setCoordinate(cells.get(random.nextInt(cells.size())));
-//                    pokemonViews.put(pkm, view);
-//                }
-//
-//                synchronized (game.map) {
-//                    game.map.getExistingPokemons().add(pkm);
-//                    game.map.setMap(pkm, Map.POKE);
-//                }
-//
-//                Platform.runLater(() -> {
-//                    synchronized (mapPane) {
-//                        mapPane.getChildren().remove(view);
-//                        mapPane.add(view, pkm.getN(), pkm.getM());
-//                    }
-//                });
+                Thread.sleep(3000 + random.nextInt(2000));
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
+            ArrayList<Cell> possibleLocations = getAllEmptyCellLocations();
+
+            Node temp;
+            synchronized (pokemonPendingViews) {
+                temp = pokemonPendingViews.remove(pkm);
+            }
+
+            pkm.setCoordinate(possibleLocations.get(random.nextInt(possibleLocations.size())));
+            synchronized (pokemonViews) {
+                pokemonViews.put(pkm, temp);
+            }
+
+            synchronized (game.map) {
+                game.map.getExistingPokemons().add(pkm);
+                game.map.setMap(pkm, Map.POKE);
+            }
+
+            if (!game.map.isDestination(game.player.currentPos()))
+                Platform.runLater(() -> {
+                    synchronized (mapPane) {
+                        mapPane.add(temp, pkm.getN(), pkm.getM());
+                    }
+                });
+
         });
-        respawnPokemonThread.start();
+        t.setDaemon(true);
+        t.start();
     }
 
     private void respawnStation(Station stn) {
+        Thread t = new Thread(() -> {
+            //suspend 5 to 10 seconds
+            Random random = new Random();
+            try {
+                Thread.sleep(5000 + random.nextInt(5000));
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            ArrayList<Cell> possibleLocations = getAllEmptyCellLocations();
 
+            Node temp;
+            synchronized (stationPendingViews) {
+                temp = stationPendingViews.remove(stn);
+            }
+
+            stn.setCoordinate(possibleLocations.get(random.nextInt(possibleLocations.size())));
+            synchronized (stationViews) {
+                stationViews.put(stn, temp);
+            }
+
+            synchronized (game.map) {
+                game.map.getExistingStations().add(stn);
+                game.map.setMap(stn, Map.SUPP);
+            }
+
+            if (!game.map.isDestination(game.player.currentPos()))
+                Platform.runLater(() -> {
+                    synchronized (mapPane) {
+                        mapPane.add(temp, stn.getN(), stn.getM());
+                    }
+                });
+
+        });
+        t.setDaemon(true);
+        t.start();
+    }
+
+    private ArrayList<Cell> getAllEmptyCellLocations() {
+        //find possible locations for respawning
+        ArrayList<Cell> possibleLocations = new ArrayList<>();
+        synchronized (game.map) {
+            for (int i = 0; i < game.map.getDimension().getM(); i++)
+                for (int j = 0; j < game.map.getDimension().getN(); j++)
+                    if (game.map.getMap()[i][j] == Map.PATH && !game.player.currentPos().equals(new Cell(i, j)))
+                        possibleLocations.add(new Cell(i, j));
+        }
+        return possibleLocations;
     }
 
     private void clearFocus() {

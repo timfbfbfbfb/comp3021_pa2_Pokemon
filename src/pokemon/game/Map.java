@@ -125,6 +125,10 @@ public class Map {
         stations.add(stn);
     }
 
+    public ArrayList<Station> getExistingStations() {
+        return this.stations;
+    }
+
     /**
      * Get the starting point of the map
      *
