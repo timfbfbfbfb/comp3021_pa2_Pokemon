@@ -71,18 +71,18 @@ public class PokemonScreen extends Application {
         mapPane = new GridPane();
 
         resumeBtn = new Button("Resume");
+        resumeBtn.setFocusTraversable(false);
         resumeBtn.setOnAction(e -> {
             if (gamePause)
                 animationTimer.start();
             gamePause = false;
-            clearFocus();
         });
         pauseBtn = new Button("Pause");
+        pauseBtn.setFocusTraversable(false);
         pauseBtn.setOnAction(e -> {
             if (!gamePause)
                 animationTimer.stop();
             gamePause = true;
-            clearFocus();
         });
 
         scorePane = new VBox();
@@ -350,7 +350,6 @@ public class PokemonScreen extends Application {
                 avatarPause = false;
         });
 
-        clearFocus();
         stage.setScene(scene);
         stage.show();
         animationTimer.start();
@@ -440,8 +439,14 @@ public class PokemonScreen extends Application {
         Thread t = new Thread(() -> {
             //suspend 3 to 5 seconds
             Random random = new Random();
+            long remaining = 3000 + random.nextInt(2000);
+            long sleepTimeUnit = 50;
             try {
-                Thread.sleep(3000 + random.nextInt(2000));
+                while (remaining >= 0) {
+                    Thread.sleep(sleepTimeUnit);
+                    if (!gamePause)
+                        remaining -= sleepTimeUnit;
+                }
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
@@ -478,8 +483,14 @@ public class PokemonScreen extends Application {
         Thread t = new Thread(() -> {
             //suspend 5 to 10 seconds
             Random random = new Random();
+            long remaining = 5000 + random.nextInt(5000);
+            long sleepTimeUnit = 50;
             try {
-                Thread.sleep(5000 + random.nextInt(5000));
+                while (remaining > 0) {
+                    Thread.sleep(sleepTimeUnit);
+                    if (!gamePause)
+                        remaining -= sleepTimeUnit;
+                }
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
@@ -522,10 +533,6 @@ public class PokemonScreen extends Application {
                         possibleLocations.add(new Cell(i, j));
         }
         return possibleLocations;
-    }
-
-    private void clearFocus() {
-        mainPane.requestFocus();
     }
 
     public static void main(String[] args) {
