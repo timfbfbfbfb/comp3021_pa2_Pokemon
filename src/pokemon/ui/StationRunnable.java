@@ -12,6 +12,9 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Random;
 
+/**
+ * The runnable class of supply station
+ */
 public class StationRunnable implements Runnable {
     private GridPane mapPane;
     private HashMap<Station, Node> stationViews;
@@ -21,6 +24,15 @@ public class StationRunnable implements Runnable {
     private boolean hidden = false;
     private PokemonScreen pokemonScreen;
 
+    /**
+     * Constructor
+     *
+     * @param station The station object
+     * @param mapPane The game map pane
+     * @param stationViews The collection of the station image views
+     * @param game The game object
+     * @param pokemonScreen The main layout
+     */
     public StationRunnable(Station station, GridPane mapPane, HashMap<Station, Node> stationViews, Game game, PokemonScreen pokemonScreen) {
         this.mapPane = mapPane;
         this.stationViews = stationViews;
@@ -30,6 +42,9 @@ public class StationRunnable implements Runnable {
     }
 
 
+    /**
+     * The override method of Runnable
+     */
     @Override
     public void run() {
         System.out.println("Station Thread (ID: " + Thread.currentThread().getId() + ") Start!");

@@ -58,14 +58,30 @@ public class Map {
         }
     }
 
+    /**
+     * Get the dimenstion of the map
+     *
+     * @return Cell object, m is the height, n is the width
+     */
     public Cell getDimension() {
         return new Cell(this.m, this.n);
     }
 
+    /**
+     * Get the game map character array
+     *
+     * @return The game map character array
+     */
     public char[][] getMap() {
         return map;
     }
 
+    /**
+     * Set the game map character array
+     *
+     * @param cell The location going to be modified
+     * @param type The new type
+     */
     public void setMap(Cell cell, char type) {
         map[cell.getM()][cell.getN()] = type;
     }
@@ -83,6 +99,12 @@ public class Map {
         return null;
     }
 
+    /**
+     * Get the station at the given location
+     *
+     * @param cell Location of the station
+     * @return The station at the given location, if it is not exist, return null
+     */
     public Station getStation(Cell cell) {
         for (Station stn : this.stations)
             if (cell.equals(stn))
@@ -112,6 +134,11 @@ public class Map {
         pokemons.add(pkm);
     }
 
+    /**
+     * Get the pokemon ArrayList
+     *
+     * @return the pokemon ArrayList
+     */
     public ArrayList<Pokemon> getExistingPokemons() {
         return this.pokemons;
     }
@@ -125,6 +152,11 @@ public class Map {
         stations.add(stn);
     }
 
+    /**
+     * Get the supply station ArrayList
+     *
+     * @return the supply station ArrayList
+     */
     public ArrayList<Station> getExistingStations() {
         return this.stations;
     }
@@ -195,13 +227,5 @@ public class Map {
      */
     public boolean isDestination(Cell cell) {
         return map[cell.getM()][cell.getN()] == Map.DEST;
-    }
-
-    public void print() {
-        for (int i = 0; i < m; i++) {
-            for (int j = 0; j < n; j++)
-                System.out.print(map[i][j]);
-            System.out.println();
-        }
     }
 }

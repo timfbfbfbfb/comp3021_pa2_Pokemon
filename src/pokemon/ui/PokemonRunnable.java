@@ -12,6 +12,9 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Random;
 
+/**
+ * The runnable class of pokemon
+ */
 public class PokemonRunnable implements Runnable {
 
     private Pokemon pokemon;
@@ -25,6 +28,15 @@ public class PokemonRunnable implements Runnable {
     private int lastCaught = 0;
     private boolean caught = false;
 
+    /**
+     * Constructor
+     *
+     * @param pkm The pokemon object
+     * @param mapPane The game map pane
+     * @param pokemonViews The collection of the station image views
+     * @param game The game object
+     * @param pkmScreen The main layout
+     */
     public PokemonRunnable(Pokemon pkm, GridPane mapPane, HashMap<Pokemon, Node> pokemonViews, Game game, PokemonScreen pkmScreen) {
         pokemon = pkm;
         this.mapPane = mapPane;
@@ -33,6 +45,9 @@ public class PokemonRunnable implements Runnable {
         this.pokemonScreen = pkmScreen;
     }
 
+    /**
+     * The override method of Runnable
+     */
     @Override
     public void run() {
         System.out.println("Pokemon Thread (ID: " + Thread.currentThread().getId() + ") Start!");

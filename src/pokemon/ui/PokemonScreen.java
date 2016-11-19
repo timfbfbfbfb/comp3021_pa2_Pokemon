@@ -139,6 +139,12 @@ public class PokemonScreen extends Application {
         game.player.move(map.getStart(), map);
     }
 
+    /**
+     * Initialize the main window
+     *
+     * @param stage the main window
+     * @throws Exception
+     */
     @Override
     public void start(Stage stage) throws Exception {
         mainPane.setCenter(mapPane);
@@ -147,6 +153,7 @@ public class PokemonScreen extends Application {
 
         Scene scene = new Scene(mainPane);
 
+        //key press event
         scene.setOnKeyPressed(e -> {
             if (!avatarPause && !gamePause) {
                 Cell pos = game.player.currentPos();
@@ -209,6 +216,7 @@ public class PokemonScreen extends Application {
             }
         });
 
+        //key release event
         scene.setOnKeyReleased(e ->
         {
             if (e.getCode() == lastKeyPressed)
@@ -217,6 +225,8 @@ public class PokemonScreen extends Application {
 
         stage.setScene(scene);
         stage.show();
+
+        //start all pokemon and station threads
         for (java.util.Map.Entry<Pokemon, Node> entry : pokemonViews.entrySet()) {
             Thread t = new Thread(new PokemonRunnable(entry.getKey(), mapPane, pokemonViews, game, this));
             t.setDaemon(true);
@@ -229,6 +239,12 @@ public class PokemonScreen extends Application {
         }
     }
 
+    /**
+     * Generate the image views
+     *
+     * @param k The view type
+     * @return Image view
+     */
     private Node viewFactory(View k) {
         switch (k) {
             case TREE:
@@ -262,6 +278,13 @@ public class PokemonScreen extends Application {
         }
     }
 
+    /**
+     * Overloading method, generate the pokemon image view
+     *
+     * @param k The view type
+     * @param cell  The pokemon location
+     * @return Image view
+     */
     private Node viewFactory(View k, Cell cell) {
         switch (k) {
             case POKE:
@@ -278,6 +301,11 @@ public class PokemonScreen extends Application {
         }
     }
 
+    /**
+     * Update the score pane
+     *
+     * @param msg The message displayed on the score pane
+     */
     public void updateScorePane(Msg msg) {
         synchronized (scorePane) {
             Player player = game.player;
@@ -311,6 +339,11 @@ public class PokemonScreen extends Application {
         }
     }
 
+    /**
+     * Bonus part, show the catch event animation
+     *
+     * @param caught whether successful or failed to catch the pokemon
+     */
     public void showCatchAnimation(boolean caught) {
         BorderPane bp = new BorderPane(new ImageView(new Image(caught ? catchSuccessfulAnimationPath : catchFailedAnimationPath)));
         catchWindow.setScene(new Scene(bp));

@@ -57,6 +57,11 @@ public class Player {
         return balls;
     }
 
+    /**
+     * Get the number of pokemons
+     *
+     * @return the number of pokemons
+     */
     public int getNumOfPokemons() {
         return this.pokemons.size();
     }
@@ -132,6 +137,12 @@ public class Player {
         return this.route.size() - 1;
     }
 
+    /**
+     * Move to the given location
+     *
+     * @param c The given location
+     * @param map The game map
+     */
     public void move(Cell c, Map map) {
         if (map.isSupplyStation(c))
             this.balls += map.getBall(c);
@@ -143,6 +154,11 @@ public class Player {
         this.route.add(c);
     }
 
+    /**
+     * catch the pokemon
+     *
+     * @param pkm The pokemon going to catch
+     */
     public void catchPokemon(Pokemon pkm) {
         pokemons.add(pkm);
         balls-=pkm.getBallsRequired();

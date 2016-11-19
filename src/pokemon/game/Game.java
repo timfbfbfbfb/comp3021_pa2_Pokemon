@@ -9,6 +9,12 @@ public class Game {
     public Map map;
     public Player player = new Player();
 
+    /**
+     * Initialize all the objects inside the game
+     *
+     * @param inputFile The given game information
+     * @throws Exception
+     */
     public void initialize(File inputFile) throws Exception {
         BufferedReader br = new BufferedReader(new FileReader(inputFile));
 
