@@ -148,6 +148,10 @@ public class Player {
         balls-=pkm.getBallsRequired();
     }
 
+    public ArrayList<Pokemon> getPokemons() {
+        return pokemons;
+    }
+
     /**
      * Override the toString method in order to print the scores, subscores and
      * the path in certain format

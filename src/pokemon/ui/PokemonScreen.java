@@ -1,6 +1,5 @@
 package pokemon.ui;
 
-import javafx.animation.AnimationTimer;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
@@ -17,9 +16,7 @@ import javafx.stage.Stage;
 import pokemon.game.*;
 
 import java.io.File;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.Random;
 
 import static javafx.scene.input.KeyCode.*;
 
@@ -29,7 +26,7 @@ public class PokemonScreen extends Application {
 
     private enum View {TREE, EXIT, BALL, PATH, POKE}
 
-    private enum Msg {NONE, UNCAUGHT, CAUGHT, ENDGAME}
+    public enum Msg {NONE, UNCAUGHT, CAUGHT, ENDGAME}
 
     private static final int STEP_SIZE = 40;
     private final BorderPane mainPane;
@@ -37,6 +34,7 @@ public class PokemonScreen extends Application {
     private final VBox scorePane;
     private final Button resumeBtn, pauseBtn;
     private final ImageView avatar;
+    private final Stage catchWindow;
 
     // this are the urls of the images
     private static final String avatarFront = new File("icons/front.png").toURI().toString();
@@ -46,14 +44,15 @@ public class PokemonScreen extends Application {
     private static final String treePath = new File("icons/tree.png").toURI().toString();
     private static final String exitPath = new File("icons/exit.png").toURI().toString();
     private static final String ballPath = new File("icons/ball_ani.gif").toURI().toString();
+    private static final String catchFailedAnimationPath = new File("icons/catch_fail.gif").toURI().toString();
+    private static final String catchSuccessfulAnimationPath = new File("icons/catch_successful.gif").toURI().toString();
 
-    private AnimationTimer animationTimer;
     private boolean avatarPause = false;
     private boolean gamePause = false;
     private KeyCode lastKeyPressed = null;
-    private int previousPlayerNoOfPokemons = 0;
-    private final HashMap<Pokemon, Node> pokemonViews, pokemonPendingViews;
-    private final HashMap<Station, Node> stationViews, stationPendingViews;
+    private final HashMap<Pokemon, Node> pokemonViews;
+    private final HashMap<Station, Node> stationViews;
+    private Thread catchAnimationThread;
 
     {
         avatar = new ImageView(new Image(avatarFront));
@@ -61,11 +60,14 @@ public class PokemonScreen extends Application {
         avatar.setFitHeight(STEP_SIZE);
         avatar.setPreserveRatio(true);
 
+        catchWindow = new Stage();
+        catchWindow.setOnCloseRequest(e -> {
+            catchAnimationThread.interrupt();
+        });
+
         game = new Game();
         pokemonViews = new HashMap<>();
-        pokemonPendingViews = new HashMap<>();
         stationViews = new HashMap<>();
-        stationPendingViews = new HashMap<>();
 
         mainPane = new BorderPane();
         mapPane = new GridPane();
@@ -73,16 +75,18 @@ public class PokemonScreen extends Application {
         resumeBtn = new Button("Resume");
         resumeBtn.setFocusTraversable(false);
         resumeBtn.setOnAction(e -> {
-            if (gamePause)
-                animationTimer.start();
-            gamePause = false;
+            if (gamePause) {
+                gamePause = false;
+                PokemonRunnable.gamePause = StationRunnable.gamePause = false;
+            }
         });
         pauseBtn = new Button("Pause");
         pauseBtn.setFocusTraversable(false);
         pauseBtn.setOnAction(e -> {
-            if (!gamePause)
-                animationTimer.stop();
-            gamePause = true;
+            if (!gamePause) {
+                gamePause = true;
+                PokemonRunnable.gamePause = StationRunnable.gamePause = true;
+            }
         });
 
         scorePane = new VBox();
@@ -141,95 +145,6 @@ public class PokemonScreen extends Application {
         mainPane.setRight(scorePane);
         updateScorePane(Msg.NONE);
 
-        animationTimer = new AnimationTimer() {
-            long lastFrameUpdateTime = 0;
-
-            @Override
-            public void handle(long l) {
-                if (game.map.isDestination(game.player.currentPos()))
-                    return;
-
-                //check if at least one second is passed
-                if (Math.abs(l - lastFrameUpdateTime) > Math.pow(10, 9))
-                    lastFrameUpdateTime = l;
-                else
-                    return;
-
-//                game.map.print();
-//                System.out.println("pokemonViews: " + pokemonViews);
-//                System.out.println("stationViews: " + stationViews);
-//                System.out.println("pokemonPendingViews: " + pokemonPendingViews);
-//                System.out.println("stationPendingViews: " + stationPendingViews);
-
-                //Randomly place the pokemons
-                HashMap<Pokemon, Node> newPokemonViews = new HashMap<>();
-                for (HashMap.Entry<Pokemon, Node> entry : pokemonViews.entrySet()) {
-                    Pokemon pkm = entry.getKey();
-                    Node node = entry.getValue();
-
-                    //randomly assign coordinate to pokemons and put into the new hashmap
-                    ArrayList<Cell> cells = new ArrayList<>();
-                    int m = pkm.getM(), n = pkm.getN();
-                    synchronized (game.map) {
-                        if (!game.map.isOutOfBound(pkm.up()) &&
-                                (pkm.up().equals(game.player.currentPos()) || game.map.getMap()[m - 1][n] == Map.PATH))
-                            cells.add(pkm.up());
-                        if (!game.map.isOutOfBound(pkm.right()) &&
-                                (pkm.right().equals(game.player.currentPos()) || game.map.getMap()[m][n + 1] == Map.PATH))
-                            cells.add(pkm.right());
-                        if (!game.map.isOutOfBound(pkm.down()) &&
-                                (pkm.down().equals(game.player.currentPos()) || game.map.getMap()[m + 1][n] == Map.PATH))
-                            cells.add(pkm.down());
-                        if (!game.map.isOutOfBound(pkm.left()) &&
-                                (pkm.left().equals(game.player.currentPos()) || game.map.getMap()[m][n - 1] == Map.PATH))
-                            cells.add(pkm.left());
-                    }
-
-                    Random random = new Random();
-
-                    synchronized (game.map) {
-                        game.map.getExistingPokemons().remove(pkm);
-                        game.map.setMap(pkm, Map.PATH);
-                    }
-                    synchronized (mapPane) {
-                        mapPane.getChildren().remove(node);
-                    }
-                    pkm.setCoordinate(cells.get(random.nextInt(cells.size())));
-
-                    if (pkm.equals(game.player.currentPos())) {
-                        if (pkm.canBeCaught(game.player.getNumOfBalls())) {
-                            game.player.catchPokemon(pkm);
-                            previousPlayerNoOfPokemons++;
-                            synchronized (scorePane) {
-                                updateScorePane(Msg.CAUGHT);
-                            }
-                        } else {
-                            synchronized (pokemonPendingViews) {
-                                pokemonPendingViews.put(pkm, node);
-                            }
-                            synchronized (scorePane) {
-                                updateScorePane(Msg.UNCAUGHT);
-                            }
-                            respawnPokemon(pkm);
-                        }
-                    } else {
-                        newPokemonViews.put(pkm, node);
-                        synchronized (game.map) {
-                            game.map.getExistingPokemons().add(pkm);
-                            game.map.setMap(pkm, Map.POKE);
-                        }
-                        synchronized (mapPane) {
-                            mapPane.add(node, pkm.getN(), pkm.getM());
-                        }
-                    }
-                }
-                synchronized (pokemonViews) {
-                    pokemonViews.clear();
-                    pokemonViews.putAll(newPokemonViews);
-                }
-            }
-        };
-
         Scene scene = new Scene(mainPane);
 
         scene.setOnKeyPressed(e -> {
@@ -275,69 +190,19 @@ public class PokemonScreen extends Application {
                             lastKeyPressed = RIGHT;
                             break;
                     }
+                    if (e.getCode() == KeyCode.UP || e.getCode() == KeyCode.DOWN || e.getCode() == KeyCode.LEFT || e.getCode() == KeyCode.RIGHT)
+                        updateScorePane(Msg.NONE);
                 }
 
                 if (lastKeyPressed == UP || lastKeyPressed == DOWN || lastKeyPressed == LEFT || lastKeyPressed == RIGHT) {
                     if (map.isDestination(game.player.currentPos())) {
-                        synchronized (scorePane) {
-                            updateScorePane(Msg.ENDGAME);
-                        }
+                        updateScorePane(Msg.ENDGAME);
                         resumeBtn.setDisable(true);
                         pauseBtn.setDisable(true);
                         avatarPause = true;
                         gamePause = true;
-                    } else if (map.isPokemon(game.player.currentPos())) {
-                        Pokemon pkm = game.map.getPokemon(game.player.currentPos());
-                        Node temp;
-                        synchronized (mapPane) {
-                            mapPane.getChildren().remove(pokemonViews.get(pkm));
-                        }
-                        synchronized (game.map) {
-                            game.map.getExistingPokemons().remove(pkm);
-                            game.map.setMap(pkm, Map.PATH);
-                        }
-                        synchronized (pokemonViews) {
-                            temp = pokemonViews.remove(pkm);
-                        }
-
-                        if (previousPlayerNoOfPokemons < game.player.getNumOfPokemons()) {
-                            synchronized (scorePane) {
-                                updateScorePane(Msg.CAUGHT);
-                            }
-                            previousPlayerNoOfPokemons++;
-                        } else {
-                            synchronized (scorePane) {
-                                updateScorePane(Msg.UNCAUGHT);
-                            }
-                            synchronized (pokemonPendingViews) {
-                                pokemonPendingViews.put(pkm, temp);
-                            }
-                            respawnPokemon(pkm);
-                        }
-                    } else if (map.isSupplyStation(game.player.currentPos())) {
-                        Station stn = game.map.getStation(game.player.currentPos());
-                        Node temp;
-                        synchronized (mapPane) {
-                            mapPane.getChildren().remove(stationViews.get(stn));
-                        }
-                        synchronized (scorePane) {
-                            updateScorePane(Msg.NONE);
-                        }
-                        synchronized (game.map) {
-                            game.map.getExistingStations().remove(stn);
-                            game.map.setMap(stn, Map.PATH);
-                        }
-                        synchronized (stationViews) {
-                            temp = stationViews.remove(stn);
-                        }
-                        synchronized (stationPendingViews) {
-                            stationPendingViews.put(stn, temp);
-                        }
-                        respawnStation(stn);
-                    } else
-                        synchronized (scorePane) {
-                            updateScorePane(Msg.NONE);
-                        }
+                        PokemonRunnable.gamePause = StationRunnable.gamePause = true;
+                    }
                     avatarPause = true;
                 }
 
@@ -352,7 +217,16 @@ public class PokemonScreen extends Application {
 
         stage.setScene(scene);
         stage.show();
-        animationTimer.start();
+        for (java.util.Map.Entry<Pokemon, Node> entry : pokemonViews.entrySet()) {
+            Thread t = new Thread(new PokemonRunnable(entry.getKey(), mapPane, pokemonViews, game, this));
+            t.setDaemon(true);
+            t.start();
+        }
+        for (java.util.Map.Entry<Station, Node> entry : stationViews.entrySet()) {
+            Thread t = new Thread(new StationRunnable(entry.getKey(), mapPane, stationViews, game, this));
+            t.setDaemon(true);
+            t.start();
+        }
     }
 
     private Node viewFactory(View k) {
@@ -404,135 +278,61 @@ public class PokemonScreen extends Application {
         }
     }
 
-    private void updateScorePane(Msg msg) {
-        Player player = game.player;
-        Label line1 = new Label("Current Score: " + player.getScore());
-        Label line2 = new Label("# of Pokemons caught: " + player.getNumOfPokemons());
-        Label line3 = new Label("# of Pokeballs owned: " + player.getNumOfBalls());
-        Label line4 = new Label();
-        switch (msg) {
-            case NONE:
-                line4.setText("");
-                line4.setTextFill(Color.valueOf("black"));
-                break;
-            case UNCAUGHT:
-                line4.setText("NOT enough pokemon ball");
-                line4.setTextFill(Color.valueOf("red"));
-                break;
-            case CAUGHT:
-                line4.setText("Pokemon caught!");
-                line4.setTextFill(Color.valueOf("green"));
-                break;
-            case ENDGAME:
-                line4.setText("End Game!");
-                line4.setTextFill(Color.valueOf("lightgreen"));
-                break;
+    public void updateScorePane(Msg msg) {
+        synchronized (scorePane) {
+            Player player = game.player;
+            Label line1 = new Label("Current Score: " + player.getScore());
+            Label line2 = new Label("# of Pokemons caught: " + player.getNumOfPokemons());
+            Label line3 = new Label("# of Pokeballs owned: " + player.getNumOfBalls());
+            Label line4 = new Label();
+            switch (msg) {
+                case NONE:
+                    line4.setText("");
+                    line4.setTextFill(Color.valueOf("black"));
+                    break;
+                case UNCAUGHT:
+                    line4.setText("NOT enough pokemon ball");
+                    line4.setTextFill(Color.valueOf("red"));
+                    break;
+                case CAUGHT:
+                    line4.setText("Pokemon caught!");
+                    line4.setTextFill(Color.valueOf("green"));
+                    break;
+                case ENDGAME:
+                    line4.setText("End Game!");
+                    line4.setTextFill(Color.valueOf("lightgreen"));
+                    break;
+            }
+            HBox btnGp = new HBox(resumeBtn, pauseBtn);
+            btnGp.setSpacing(10);
+            scorePane.getChildren().clear();
+            scorePane.getChildren().addAll(line1, line2, line3, line4, btnGp);
+            scorePane.setSpacing(10);
         }
-        HBox btnGp = new HBox(resumeBtn, pauseBtn);
-        btnGp.setSpacing(10);
-        scorePane.getChildren().clear();
-        scorePane.getChildren().addAll(line1, line2, line3, line4, btnGp);
-        scorePane.setSpacing(10);
     }
 
-    private void respawnPokemon(Pokemon pkm) {
-        Thread t = new Thread(() -> {
-            //suspend 3 to 5 seconds
-            Random random = new Random();
-            long remaining = 3000 + random.nextInt(2000);
-            long sleepTimeUnit = 50;
+    public void showCatchAnimation(boolean caught) {
+        BorderPane bp = new BorderPane(new ImageView(new Image(caught ? catchSuccessfulAnimationPath : catchFailedAnimationPath)));
+        catchWindow.setScene(new Scene(bp));
+        catchAnimationThread = new Thread(() -> {
+            Platform.runLater(catchWindow::show);
+            gamePause = true;
+            PokemonRunnable.gamePause = StationRunnable.gamePause = true;
             try {
-                while (remaining >= 0) {
-                    Thread.sleep(sleepTimeUnit);
-                    if (!gamePause)
-                        remaining -= sleepTimeUnit;
-                }
+                Thread.sleep(caught ? 11733 : 10200);
             } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-            ArrayList<Cell> possibleLocations = getAllEmptyCellLocations();
-
-            Node temp;
-            synchronized (pokemonPendingViews) {
-                temp = pokemonPendingViews.remove(pkm);
-            }
-
-            pkm.setCoordinate(possibleLocations.get(random.nextInt(possibleLocations.size())));
-            synchronized (pokemonViews) {
-                pokemonViews.put(pkm, temp);
-            }
-
-            synchronized (game.map) {
-                game.map.getExistingPokemons().add(pkm);
-                game.map.setMap(pkm, Map.POKE);
-            }
-
-            if (!game.map.isDestination(game.player.currentPos()))
+                System.out.println("Sleep interrupted, continue the game.");
+            } finally {
+                gamePause = false;
+                PokemonRunnable.gamePause = StationRunnable.gamePause = false;
                 Platform.runLater(() -> {
-                    synchronized (mapPane) {
-                        mapPane.add(temp, pkm.getN(), pkm.getM());
-                    }
+                    catchWindow.close();
+                    mainPane.requestFocus();
                 });
-
+            }
         });
-        t.setDaemon(true);
-        t.start();
-    }
-
-    private void respawnStation(Station stn) {
-        Thread t = new Thread(() -> {
-            //suspend 5 to 10 seconds
-            Random random = new Random();
-            long remaining = 5000 + random.nextInt(5000);
-            long sleepTimeUnit = 50;
-            try {
-                while (remaining > 0) {
-                    Thread.sleep(sleepTimeUnit);
-                    if (!gamePause)
-                        remaining -= sleepTimeUnit;
-                }
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-            ArrayList<Cell> possibleLocations = getAllEmptyCellLocations();
-
-            Node temp;
-            synchronized (stationPendingViews) {
-                temp = stationPendingViews.remove(stn);
-            }
-
-            stn.setCoordinate(possibleLocations.get(random.nextInt(possibleLocations.size())));
-            synchronized (stationViews) {
-                stationViews.put(stn, temp);
-            }
-
-            synchronized (game.map) {
-                game.map.getExistingStations().add(stn);
-                game.map.setMap(stn, Map.SUPP);
-            }
-
-            if (!game.map.isDestination(game.player.currentPos()))
-                Platform.runLater(() -> {
-                    synchronized (mapPane) {
-                        mapPane.add(temp, stn.getN(), stn.getM());
-                    }
-                });
-
-        });
-        t.setDaemon(true);
-        t.start();
-    }
-
-    private ArrayList<Cell> getAllEmptyCellLocations() {
-        //find possible locations for respawning
-        ArrayList<Cell> possibleLocations = new ArrayList<>();
-        synchronized (game.map) {
-            for (int i = 0; i < game.map.getDimension().getM(); i++)
-                for (int j = 0; j < game.map.getDimension().getN(); j++)
-                    if (game.map.getMap()[i][j] == Map.PATH && !game.player.currentPos().equals(new Cell(i, j)))
-                        possibleLocations.add(new Cell(i, j));
-        }
-        return possibleLocations;
+        catchAnimationThread.setDaemon(true);
+        catchAnimationThread.start();
     }
 
     public static void main(String[] args) {
