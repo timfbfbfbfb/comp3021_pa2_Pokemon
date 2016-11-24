@@ -35,8 +35,9 @@ public class PokemonScreen extends Application {
     private final Button resumeBtn, pauseBtn;
     private final ImageView avatar;
     private final Stage catchWindow;
+    private final ImageView catchImageView;
 
-    // this are the urls of the images
+    // these are the urls of the images
     private static final String avatarFront = new File("icons/front.png").toURI().toString();
     private static final String avatarBack = new File("icons/back.png").toURI().toString();
     private static final String avatarLeft = new File("icons/left.png").toURI().toString();
@@ -46,6 +47,17 @@ public class PokemonScreen extends Application {
     private static final String ballPath = new File("icons/ball_ani.gif").toURI().toString();
     private static final String catchFailedAnimationPath = new File("icons/catch_fail.gif").toURI().toString();
     private static final String catchSuccessfulAnimationPath = new File("icons/catch_successful.gif").toURI().toString();
+
+    //images
+    private static Image avatarFrontImg;
+    private static Image avatarBackImg;
+    private static Image avatarLeftImg;
+    private static Image avatarRightImg;
+    private static Image treeImg;
+    private static Image exitImg;
+    private static Image ballImg;
+    private static Image catchFailedAnimationImg;
+    private static Image catchSuccessfulAnimationImg;
 
     private boolean avatarPause = false;
     private boolean gamePause = false;
@@ -64,6 +76,8 @@ public class PokemonScreen extends Application {
         catchWindow.setOnCloseRequest(e -> {
             catchAnimationThread.interrupt();
         });
+        catchImageView = new ImageView();
+        catchWindow.setScene(new Scene(new BorderPane(catchImageView)));
 
         game = new Game();
         pokemonViews = new HashMap<>();
@@ -103,6 +117,19 @@ public class PokemonScreen extends Application {
         } catch (Exception e) {
             e.printStackTrace();
         }
+
+        //initialize images
+        avatarFrontImg = new Image(avatarFront);
+        avatarBackImg = new Image(avatarBack);
+        avatarLeftImg = new Image(avatarLeft);
+        avatarRightImg = new Image(avatarRight);
+        treeImg = new Image(treePath);
+        exitImg = new Image(exitPath);
+        ballImg = new Image(ballPath);
+
+        catchFailedAnimationImg = new Image(catchFailedAnimationPath);
+        catchSuccessfulAnimationImg = new Image(catchSuccessfulAnimationPath);
+        catchSuccessfulAnimationImg.cancel();
 
         Map map = game.map;
         Cell dimension = map.getDimension();
@@ -161,7 +188,7 @@ public class PokemonScreen extends Application {
                 synchronized (mapPane) {
                     switch (e.getCode()) {
                         case UP:
-                            avatar.setImage(new Image(avatarBack));
+                            avatar.setImage(avatarBackImg);
                             if (!map.isOutOfBound(pos.up()) && !map.isWall(pos.up())) {
                                 game.player.move(pos.up(), map);
                                 mapPane.getChildren().remove(avatar);
@@ -170,7 +197,7 @@ public class PokemonScreen extends Application {
                             lastKeyPressed = UP;
                             break;
                         case DOWN:
-                            avatar.setImage(new Image(avatarFront));
+                            avatar.setImage(avatarFrontImg);
                             if (!map.isOutOfBound(pos.down()) && !map.isWall(pos.down())) {
                                 game.player.move(pos.down(), map);
                                 mapPane.getChildren().remove(avatar);
@@ -179,7 +206,7 @@ public class PokemonScreen extends Application {
                             lastKeyPressed = DOWN;
                             break;
                         case LEFT:
-                            avatar.setImage(new Image(avatarLeft));
+                            avatar.setImage(avatarLeftImg);
                             if (!map.isOutOfBound(pos.left()) && !map.isWall(pos.left())) {
                                 game.player.move(pos.left(), map);
                                 mapPane.getChildren().remove(avatar);
@@ -188,7 +215,7 @@ public class PokemonScreen extends Application {
                             lastKeyPressed = LEFT;
                             break;
                         case RIGHT:
-                            avatar.setImage(new Image(avatarRight));
+                            avatar.setImage(avatarRightImg);
                             if (!map.isOutOfBound(pos.right()) && !map.isWall(pos.right())) {
                                 game.player.move(pos.right(), map);
                                 mapPane.getChildren().remove(avatar);
@@ -248,21 +275,21 @@ public class PokemonScreen extends Application {
     private Node viewFactory(View k) {
         switch (k) {
             case TREE:
-                ImageView TREE = new ImageView(new Image(treePath));
+                ImageView TREE = new ImageView(treeImg);
                 TREE.setFitHeight(STEP_SIZE);
                 TREE.setFitWidth(STEP_SIZE);
                 TREE.setPreserveRatio(true);
                 return TREE;
 
             case EXIT:
-                ImageView EXIT = new ImageView(new Image(exitPath));
+                ImageView EXIT = new ImageView(exitImg);
                 EXIT.setFitHeight(STEP_SIZE);
                 EXIT.setFitWidth(STEP_SIZE);
                 EXIT.setPreserveRatio(true);
                 return EXIT;
 
             case BALL:
-                ImageView BALL = new ImageView(new Image(ballPath));
+                ImageView BALL = new ImageView(ballImg);
                 BALL.setFitHeight(STEP_SIZE);
                 BALL.setFitWidth(STEP_SIZE);
                 BALL.setPreserveRatio(true);
@@ -281,8 +308,8 @@ public class PokemonScreen extends Application {
     /**
      * Overloading method, generate the pokemon image view
      *
-     * @param k The view type
-     * @param cell  The pokemon location
+     * @param k    The view type
+     * @param cell The pokemon location
      * @return Image view
      */
     private Node viewFactory(View k, Cell cell) {
@@ -345,8 +372,8 @@ public class PokemonScreen extends Application {
      * @param caught whether successful or failed to catch the pokemon
      */
     public void showCatchAnimation(boolean caught) {
-        BorderPane bp = new BorderPane(new ImageView(new Image(caught ? catchSuccessfulAnimationPath : catchFailedAnimationPath)));
-        catchWindow.setScene(new Scene(bp));
+        catchImageView.setImage(new Image(caught ? catchSuccessfulAnimationPath : catchFailedAnimationPath));
+//        catchImageView.setImage(caught ? catchSuccessfulAnimationImg : catchFailedAnimationImg);
         catchAnimationThread = new Thread(() -> {
             Platform.runLater(catchWindow::show);
             gamePause = true;
