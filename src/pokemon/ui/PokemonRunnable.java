@@ -31,11 +31,11 @@ public class PokemonRunnable implements Runnable {
     /**
      * Constructor
      *
-     * @param pkm The pokemon object
-     * @param mapPane The game map pane
+     * @param pkm          The pokemon object
+     * @param mapPane      The game map pane
      * @param pokemonViews The collection of the station image views
-     * @param game The game object
-     * @param pkmScreen The main layout
+     * @param game         The game object
+     * @param pkmScreen    The main layout
      */
     public PokemonRunnable(Pokemon pkm, GridPane mapPane, HashMap<Pokemon, Node> pokemonViews, Game game, PokemonScreen pkmScreen) {
         pokemon = pkm;

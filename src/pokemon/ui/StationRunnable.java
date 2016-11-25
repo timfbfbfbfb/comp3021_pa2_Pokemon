@@ -27,10 +27,10 @@ public class StationRunnable implements Runnable {
     /**
      * Constructor
      *
-     * @param station The station object
-     * @param mapPane The game map pane
-     * @param stationViews The collection of the station image views
-     * @param game The game object
+     * @param station       The station object
+     * @param mapPane       The game map pane
+     * @param stationViews  The collection of the station image views
+     * @param game          The game object
      * @param pokemonScreen The main layout
      */
     public StationRunnable(Station station, GridPane mapPane, HashMap<Station, Node> stationViews, Game game, PokemonScreen pokemonScreen) {
@@ -74,8 +74,8 @@ public class StationRunnable implements Runnable {
                 }
                 hidden = true;
 
-                Platform.runLater(()->{
-                        pokemonScreen.updateScorePane(PokemonScreen.Msg.NONE);
+                Platform.runLater(() -> {
+                    pokemonScreen.updateScorePane(PokemonScreen.Msg.NONE);
                 });
 
                 try {

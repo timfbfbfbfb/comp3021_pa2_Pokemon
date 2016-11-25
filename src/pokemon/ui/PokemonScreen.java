@@ -16,6 +16,7 @@ import javafx.stage.Stage;
 import pokemon.game.*;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.HashMap;
 
 import static javafx.scene.input.KeyCode.*;
@@ -34,8 +35,9 @@ public class PokemonScreen extends Application {
     private final VBox scorePane;
     private final Button resumeBtn, pauseBtn;
     private final ImageView avatar;
-    private final Stage catchWindow;
-    private final ImageView catchImageView;
+    private final Stage catchAnimationWindow;
+    private final ImageView catchAnimationImageView;
+    private Thread catchAnimationThread;
 
     // these are the urls of the images
     private static final String avatarFront = new File("icons/front.png").toURI().toString();
@@ -45,8 +47,6 @@ public class PokemonScreen extends Application {
     private static final String treePath = new File("icons/tree.png").toURI().toString();
     private static final String exitPath = new File("icons/exit.png").toURI().toString();
     private static final String ballPath = new File("icons/ball_ani.gif").toURI().toString();
-    private static final String catchFailedAnimationPath = new File("icons/catch_fail.gif").toURI().toString();
-    private static final String catchSuccessfulAnimationPath = new File("icons/catch_successful.gif").toURI().toString();
 
     //images
     private static Image avatarFrontImg;
@@ -56,15 +56,13 @@ public class PokemonScreen extends Application {
     private static Image treeImg;
     private static Image exitImg;
     private static Image ballImg;
-    private static Image catchFailedAnimationImg;
-    private static Image catchSuccessfulAnimationImg;
+    private static ArrayList<Image> catchSuccessfulFrames, catchFailedFrames;
 
     private boolean avatarPause = false;
     private boolean gamePause = false;
     private KeyCode lastKeyPressed = null;
     private final HashMap<Pokemon, Node> pokemonViews;
     private final HashMap<Station, Node> stationViews;
-    private Thread catchAnimationThread;
 
     {
         avatar = new ImageView(new Image(avatarFront));
@@ -72,12 +70,22 @@ public class PokemonScreen extends Application {
         avatar.setFitHeight(STEP_SIZE);
         avatar.setPreserveRatio(true);
 
-        catchWindow = new Stage();
-        catchWindow.setOnCloseRequest(e -> {
+        catchSuccessfulFrames = new ArrayList<>();
+        for (int i = 0; i <= 233; i++)
+            catchSuccessfulFrames.add(new Image(new File("icons/catch_successful/frame_" + i + "_delay-0.05s.gif").toURI().toString()));
+        catchFailedFrames = new ArrayList<>();
+        for (int i = 0; i <= 203; i++)
+            catchFailedFrames.add(new Image(new File("icons/catch_fail/frame_" + i + "_delay-0.05s.gif").toURI().toString()));
+
+        catchAnimationImageView = new ImageView(catchSuccessfulFrames.get(0));
+        catchAnimationWindow = new Stage();
+        catchAnimationWindow.setScene(new Scene(new BorderPane(catchAnimationImageView)));
+        catchAnimationWindow.setResizable(false);
+        catchAnimationWindow.setTitle("Trying to catch Pokemon...");
+        catchAnimationWindow.setAlwaysOnTop(true);
+        catchAnimationWindow.setOnCloseRequest(e -> {
             catchAnimationThread.interrupt();
         });
-        catchImageView = new ImageView();
-        catchWindow.setScene(new Scene(new BorderPane(catchImageView)));
 
         game = new Game();
         pokemonViews = new HashMap<>();
@@ -126,10 +134,6 @@ public class PokemonScreen extends Application {
         treeImg = new Image(treePath);
         exitImg = new Image(exitPath);
         ballImg = new Image(ballPath);
-
-        catchFailedAnimationImg = new Image(catchFailedAnimationPath);
-        catchSuccessfulAnimationImg = new Image(catchSuccessfulAnimationPath);
-        catchSuccessfulAnimationImg.cancel();
 
         Map map = game.map;
         Cell dimension = map.getDimension();
@@ -372,23 +376,24 @@ public class PokemonScreen extends Application {
      * @param caught whether successful or failed to catch the pokemon
      */
     public void showCatchAnimation(boolean caught) {
-        catchImageView.setImage(new Image(caught ? catchSuccessfulAnimationPath : catchFailedAnimationPath));
-//        catchImageView.setImage(caught ? catchSuccessfulAnimationImg : catchFailedAnimationImg);
         catchAnimationThread = new Thread(() -> {
-            Platform.runLater(catchWindow::show);
-            gamePause = true;
-            PokemonRunnable.gamePause = StationRunnable.gamePause = true;
+            ArrayList<Image> frames = (caught ? catchSuccessfulFrames : catchFailedFrames);
             try {
-                Thread.sleep(caught ? 11733 : 10200);
+                Platform.runLater(catchAnimationWindow::show);
+                gamePause = PokemonRunnable.gamePause = StationRunnable.gamePause = true;
+                for (int i = 0; i < frames.size(); i++) {
+                    final Image img = frames.get(i);
+                    Platform.runLater(() -> {
+                        catchAnimationImageView.setImage(img);
+                    });
+                    if (i < frames.size() - 1)
+                        Thread.sleep(50);
+                }
             } catch (InterruptedException e) {
-                System.out.println("Sleep interrupted, continue the game.");
+                System.out.println("Animation window is interrupted, continue the game...");
             } finally {
-                gamePause = false;
-                PokemonRunnable.gamePause = StationRunnable.gamePause = false;
-                Platform.runLater(() -> {
-                    catchWindow.close();
-                    mainPane.requestFocus();
-                });
+                gamePause = avatarPause = PokemonRunnable.gamePause = StationRunnable.gamePause = false;
+                Platform.runLater(catchAnimationWindow::close);
             }
         });
         catchAnimationThread.setDaemon(true);
